@@ -46,12 +46,14 @@ class Play:
         self.folder = folder
 
     def get_tasks(self):
-        return [
-            Task(p)
-            for p in self.data.get("tasks", [])
-            + self.data.get("pre_tasks", [])
-            + self.data.get("post_tasks", [])
-        ]
+        tasks = TaskList(self.data.get("tasks", []), self.folder)
+        pre_tasks = TaskList(self.data.get("pre_tasks", []), self.folder)
+        post_tasks = TaskList(self.data.get("post_tasks", []), self.folder)
+        return (
+            tasks.find_all_tasks()
+            + pre_tasks.find_all_tasks()
+            + post_tasks.find_all_tasks()
+        )
 
     def get_roles(self):
         return [
@@ -70,6 +72,35 @@ class Play:
         return set().union(*tag_list)
 
 
+class TaskList:
+    def __init__(self, data, folder):
+        self.folder = folder
+        self.data = data
+
+    def get_tasks(self):
+        return [Task(p) for p in self.data]
+
+    def find_all_tasks(self):
+        tasks = self.get_tasks()
+        imported_tasks = []
+        for task in tasks:
+            if "include_tasks" in task.data:
+                tf = TaskFile(self.folder, task.data["include_tasks"])
+                imported_tasks.extend(tf.get_tasks())
+            if "import_tasks" in task.data:
+                tf = TaskFile(self.folder, task.data["import_tasks"])
+                imported_tasks.extend(tf.get_tasks())
+            if task.is_block():
+                block_task = [Task(t) for t in task.data.get("block", [])]
+                rescue_task = [Task(t) for t in task.data.get("rescue", [])]
+                always_task = [Task(t) for t in task.data.get("always", [])]
+                tasks.extend(block_task + rescue_task + always_task)
+        return tasks + imported_tasks
+
+    def find_all_tags(self):
+        return [task.get_tags() for task in self.find_all_tasks()]
+
+
 class Task:
     def __init__(self, data):
         self.data = data
@@ -79,6 +110,13 @@ class Task:
         if isinstance(raw_tag, str):
             return set([raw_tag])
         return set(raw_tag)
+
+    def _get_type_candidates(self):
+        keys = self.data.keys()
+        return keys - self.RESERVED_OPTIONS
+
+    def is_block(self):
+        return "block" in self._get_type_candidates()
 
     def __repr__(self):
         return self.data.__repr__()
@@ -111,26 +149,18 @@ class TaskFile:
         with open(folder / filename, "r") as stream:
             try:
                 self.data = yaml.load(stream, Loader=Loader)
+                self.task_list = TaskList(self.data, self.task_folder)
             except yaml.YAMLError as exc:
                 print(exc)
 
     def get_tasks(self):
-        return [Task(p) for p in self.data]
+        return self.task_list.get_tasks()
 
     def find_all_tasks(self):
-        tasks = self.get_tasks()
-        imported_tasks = []
-        for task in tasks:
-            if "include_tasks" in task.data:
-                tf = TaskFile(self.task_folder, task.data["include_tasks"])
-                imported_tasks.extend(tf.get_tasks())
-            if "import_tasks" in task.data:
-                tf = TaskFile(self.task_folder, task.data["import_tasks"])
-                imported_tasks.extend(tf.get_tasks())
-        return tasks + imported_tasks
+        return self.task_list.find_all_tasks()
 
     def find_all_tags(self):
-        return [task.get_tags() for task in self.find_all_tasks()]
+        return self.task_list.find_all_tags()
 
 
 @lru_cache
@@ -191,6 +221,6 @@ if __name__ == "__main__":
 
 
 # TODO:
+# Tags of dependencies
 # import playbook
-# blocks
 # Generate snips
