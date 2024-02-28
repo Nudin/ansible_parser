@@ -3,12 +3,20 @@ from functools import lru_cache
 
 import yaml
 
+# Safe loader is slower that CLoader but safe to use on untrusted yaml
+USE_SAFE_LOADER = False
+
+if USE_SAFE_LOADER:
+    Loader = yaml.SafeLoader
+else:
+    Loader = yaml.CLoader
+
 
 class Playbook:
     def __init__(self, filename):
         with open(filename, "r") as stream:
             try:
-                self.document = yaml.safe_load(stream)
+                self.document = yaml.load(stream, Loader=Loader)
             except yaml.YAMLError as exc:
                 print(exc)
 
@@ -82,7 +90,7 @@ class Role:
         # print("Analyse role", name)
         try:
             with open("roles/" + name + "/tasks/main.yml", "r") as stream:
-                self.data = yaml.safe_load(stream)
+                self.data = yaml.load(stream, Loader=Loader)
         except FileNotFoundError:
             self.data = []
         except yaml.YAMLError as exc:
@@ -90,7 +98,7 @@ class Role:
 
         try:
             with open("roles/" + name + "/meta/main.yml", "r") as stream:
-                self.meta_data = yaml.safe_load(stream)
+                self.meta_data = yaml.load(stream, Loader=Loader)
         except FileNotFoundError:
             self.meta_data = {}
         except yaml.YAMLError as exc:
