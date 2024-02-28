@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import sys
 from functools import lru_cache
+from pathlib import Path
 
 import yaml
 
@@ -15,6 +16,7 @@ else:
 
 class Playbook:
     def __init__(self, filename):
+        self.folder = filename.parent
         with open(filename, "r") as stream:
             try:
                 self.document = yaml.load(stream, Loader=Loader)
@@ -22,7 +24,7 @@ class Playbook:
                 print(exc)
 
     def get_plays(self):
-        return [Play(p) for p in self.document]
+        return [Play(p, self.folder) for p in self.document]
 
     def find_all_tags(self):
         tag_list = [play.find_all_tags() for play in self.get_plays()]
@@ -30,8 +32,9 @@ class Playbook:
 
 
 class Play:
-    def __init__(self, data):
+    def __init__(self, data, folder):
         self.data = data
+        self.folder = folder
 
     def get_tasks(self):
         return [
@@ -42,7 +45,9 @@ class Play:
         ]
 
     def get_roles(self):
-        return [RoleInvocation(role) for role in self.data.get("roles", [])]
+        return [
+            RoleInvocation(role, self.folder) for role in self.data.get("roles", [])
+        ]
 
     def find_all_task(self):
         return self.get_tasks() + [role.get_tasks() for role in self.get_roles()]
@@ -69,10 +74,11 @@ class Task:
 
 
 class RoleInvocation:
-    def __init__(self, data):
+    def __init__(self, data, folder):
+        self.folder = folder
         self.data = data
         self.name = data["role"]
-        self.role = Role(self.name)
+        self.role = Role(folder, self.name)
 
     def get_tags(self):
         raw_tag = self.data.get("tags", [])
@@ -88,7 +94,7 @@ class RoleInvocation:
 class TaskFile:
     def __init__(self, folder, filename):
         self.task_folder = folder
-        with open(filename, "r") as stream:
+        with open(folder / filename, "r") as stream:
             try:
                 self.data = yaml.load(stream, Loader=Loader)
             except yaml.YAMLError as exc:
@@ -99,14 +105,10 @@ class TaskFile:
         imported_tasks = []
         for task in tasks:
             if "include_tasks" in task.data:
-                tf = TaskFile(
-                    self.task_folder, self.task_folder + task.data["include_tasks"]
-                )
+                tf = TaskFile(self.task_folder, task.data["include_tasks"])
                 imported_tasks.extend(tf.get_tasks())
             if "import_tasks" in task.data:
-                tf = TaskFile(
-                    self.task_folder, self.task_folder + task.data["import_tasks"]
-                )
+                tf = TaskFile(self.task_folder, task.data["import_tasks"])
                 imported_tasks.extend(tf.get_tasks())
         return tasks + imported_tasks
 
@@ -116,17 +118,19 @@ class TaskFile:
 
 @lru_cache
 class Role:
-    def __init__(self, name):
+    def __init__(self, folder, name):
         self.name = name
         # print("Analyse role", name)
-        self.task_folder = "roles/" + name + "/tasks/"
+        self.playbook_folder = folder
+        self.folder = folder / "roles" / name
+        self.task_folder = self.folder / "tasks"
         try:
-            self.main = TaskFile(self.task_folder, self.task_folder + "main.yml")
+            self.main = TaskFile(self.task_folder, "main.yml")
         except FileNotFoundError:
             self.main = None
 
         try:
-            with open("roles/" + name + "/meta/main.yml", "r") as stream:
+            with open(self.folder / "meta" / "main.yml", "r") as stream:
                 self.meta_data = yaml.load(stream, Loader=Loader)
         except FileNotFoundError:
             self.meta_data = {}
@@ -134,7 +138,10 @@ class Role:
             print(exc)
 
     def get_dependencies(self):
-        return [RoleInvocation(d) for d in self.meta_data.get("dependencies", [])]
+        return [
+            RoleInvocation(d, self.playbook_folder)
+            for d in self.meta_data.get("dependencies", [])
+        ]
 
     def get_tasks(self):
         if self.main:
@@ -150,7 +157,7 @@ class Role:
 
 
 def main():
-    playbook = sys.argv[1]
+    playbook = Path(sys.argv[1])
     pb = Playbook(playbook)
     print(pb.find_all_tags())
 
