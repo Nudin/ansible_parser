@@ -261,6 +261,5 @@ if __name__ == "__main__":
 
 
 # TODO:
-# Tags of dependencies
 # import playbook
 # Generate snips
