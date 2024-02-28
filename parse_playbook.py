@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import sys
 from functools import lru_cache
 
 import yaml
@@ -118,7 +119,8 @@ class Role:
 
 
 def main():
-    pb = Playbook("deploy-pretix.yml")
+    playbook = sys.argv[1]
+    pb = Playbook(playbook)
     print(pb.find_all_tags())
 
 
