@@ -80,7 +80,7 @@ class TaskList:
     def get_tasks(self):
         return [Task(p) for p in self.data]
 
-    def find_all_tasks(self):
+    def find_all_tasks(self, include_blocks=False):
         tasks = self.get_tasks()
         imported_tasks = []
         for task in tasks:
@@ -94,14 +94,43 @@ class TaskList:
                 block_task = [Task(t) for t in task.data.get("block", [])]
                 rescue_task = [Task(t) for t in task.data.get("rescue", [])]
                 always_task = [Task(t) for t in task.data.get("always", [])]
+                if not include_blocks:
+                    tasks.remove(task)
                 tasks.extend(block_task + rescue_task + always_task)
         return tasks + imported_tasks
 
     def find_all_tags(self):
-        return [task.get_tags() for task in self.find_all_tasks()]
+        return [task.get_tags() for task in self.find_all_tasks(include_blocks=True)]
 
 
 class Task:
+    RESERVED_OPTIONS = [
+        "name",
+        "delegate_to",
+        "ignore_errors",
+        "when",
+        "loop",
+        "tags",
+        "changed_when",
+        "notify",
+        "args",
+        "loop_control",
+        "become",
+        "become_user",
+        "register",
+        "with_items",
+        "check_mode",
+        "failed_when",
+        "throttle",
+        "environment",
+        "run_once",
+        "with_nested",
+        "delegate_facts",
+        "diff",
+        "with_fileglob",
+        "vars",
+    ]
+
     def __init__(self, data):
         self.data = data
 
@@ -114,6 +143,17 @@ class Task:
     def _get_type_candidates(self):
         keys = self.data.keys()
         return keys - self.RESERVED_OPTIONS
+
+    def get_type(self):
+        candidates = self._get_type_candidates()
+        if len(candidates) == 1:
+            return candidates.pop()
+        else:
+            raise ValueError("Cannot guess type of task")
+
+    def get_args(self):
+        # TODO: Include arguments in "args"?
+        return self.data[self.get_type()]
 
     def is_block(self):
         return "block" in self._get_type_candidates()
