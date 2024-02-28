@@ -85,17 +85,45 @@ class RoleInvocation:
 
 
 @lru_cache
+class TaskFile:
+    def __init__(self, folder, filename):
+        self.task_folder = folder
+        with open(filename, "r") as stream:
+            try:
+                self.data = yaml.load(stream, Loader=Loader)
+            except yaml.YAMLError as exc:
+                print(exc)
+
+    def get_tasks(self):
+        tasks = [Task(p) for p in self.data]
+        imported_tasks = []
+        for task in tasks:
+            if "include_tasks" in task.data:
+                tf = TaskFile(
+                    self.task_folder, self.task_folder + task.data["include_tasks"]
+                )
+                imported_tasks.extend(tf.get_tasks())
+            if "import_tasks" in task.data:
+                tf = TaskFile(
+                    self.task_folder, self.task_folder + task.data["import_tasks"]
+                )
+                imported_tasks.extend(tf.get_tasks())
+        return tasks + imported_tasks
+
+    def find_all_tags(self):
+        return [task.get_tags() for task in self.get_tasks()]
+
+
+@lru_cache
 class Role:
     def __init__(self, name):
         self.name = name
         # print("Analyse role", name)
+        self.task_folder = "roles/" + name + "/tasks/"
         try:
-            with open("roles/" + name + "/tasks/main.yml", "r") as stream:
-                self.data = yaml.load(stream, Loader=Loader)
+            self.main = TaskFile(self.task_folder, self.task_folder + "main.yml")
         except FileNotFoundError:
-            self.data = []
-        except yaml.YAMLError as exc:
-            print(exc)
+            self.main = None
 
         try:
             with open("roles/" + name + "/meta/main.yml", "r") as stream:
@@ -109,7 +137,10 @@ class Role:
         return [RoleInvocation(d) for d in self.meta_data.get("dependencies", [])]
 
     def get_tasks(self):
-        return set(Task(p) for p in self.data)
+        if self.main:
+            return self.main.get_tasks()
+        else:
+            return []
 
     def find_all_tags(self):
         tag_lists = [task.get_tags() for task in self.get_tasks()] + [
@@ -129,6 +160,6 @@ if __name__ == "__main__":
 
 
 # TODO:
-# includes & imports
+# import playbook
 # blocks
 # Generate snips
