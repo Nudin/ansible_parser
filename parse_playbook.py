@@ -61,14 +61,23 @@ class Play:
         ]
 
     def find_all_tasks(self):
-        return self.get_tasks() + flatten_list(
-            [role.find_all_tasks() for role in self.get_roles()]
+        imported_tasks = []
+        if "import_playbook" in self.data:
+            imported = Playbook(self.folder / self.data["import_playbook"])
+            imported_tasks = imported.find_all_tasks()
+        return (
+            self.get_tasks()
+            + flatten_list([role.find_all_tasks() for role in self.get_roles()])
+            + imported_tasks
         )
 
     def find_all_tags(self):
         tag_list = [task.get_tags() for task in self.get_tasks()] + [
             role.find_all_tags() for role in self.get_roles()
         ]
+        if "import_playbook" in self.data:
+            imported = Playbook(self.folder / self.data["import_playbook"])
+            tag_list.append(imported.find_all_tags())
         return set().union(*tag_list)
 
 
@@ -261,5 +270,4 @@ if __name__ == "__main__":
 
 
 # TODO:
-# import playbook
 # Generate snips
