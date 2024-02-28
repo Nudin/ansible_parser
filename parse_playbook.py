@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import itertools
 import sys
 from functools import lru_cache
 from pathlib import Path
@@ -14,6 +15,10 @@ else:
     Loader = yaml.CLoader
 
 
+def flatten_list(list_of_lists):
+    return list(itertools.chain(*list_of_lists))
+
+
 class Playbook:
     def __init__(self, filename):
         self.folder = filename.parent
@@ -25,6 +30,10 @@ class Playbook:
 
     def get_plays(self):
         return [Play(p, self.folder) for p in self.document]
+
+    def find_all_tasks(self):
+        task_list = [play.find_all_tasks() for play in self.get_plays()]
+        return flatten_list(task_list)
 
     def find_all_tags(self):
         tag_list = [play.find_all_tags() for play in self.get_plays()]
@@ -49,8 +58,10 @@ class Play:
             RoleInvocation(role, self.folder) for role in self.data.get("roles", [])
         ]
 
-    def find_all_task(self):
-        return self.get_tasks() + [role.get_tasks() for role in self.get_roles()]
+    def find_all_tasks(self):
+        return self.get_tasks() + flatten_list(
+            [role.find_all_tasks() for role in self.get_roles()]
+        )
 
     def find_all_tags(self):
         tag_list = [task.get_tags() for task in self.get_tasks()] + [
@@ -86,6 +97,9 @@ class RoleInvocation:
             return set([raw_tag])
         return set(raw_tag)
 
+    def find_all_tasks(self):
+        return self.role.find_all_tasks()
+
     def find_all_tags(self):
         return self.get_tags().union(self.role.find_all_tags())
 
@@ -101,7 +115,10 @@ class TaskFile:
                 print(exc)
 
     def get_tasks(self):
-        tasks = [Task(p) for p in self.data]
+        return [Task(p) for p in self.data]
+
+    def find_all_tasks(self):
+        tasks = self.get_tasks()
         imported_tasks = []
         for task in tasks:
             if "include_tasks" in task.data:
@@ -113,7 +130,7 @@ class TaskFile:
         return tasks + imported_tasks
 
     def find_all_tags(self):
-        return [task.get_tags() for task in self.get_tasks()]
+        return [task.get_tags() for task in self.find_all_tasks()]
 
 
 @lru_cache
@@ -145,9 +162,15 @@ class Role:
 
     def get_tasks(self):
         if self.main:
-            return self.main.get_tasks()
+            return self.main.find_all_tasks()
         else:
             return []
+
+    def find_all_tasks(self):
+        dependency_tasks = [
+            dependency.find_all_tasks() for dependency in self.get_dependencies()
+        ]
+        return self.get_tasks() + flatten_list(dependency_tasks)
 
     def find_all_tags(self):
         tag_lists = [task.get_tags() for task in self.get_tasks()] + [
@@ -160,6 +183,7 @@ def main():
     playbook = Path(sys.argv[1])
     pb = Playbook(playbook)
     print(pb.find_all_tags())
+    # print(pb.find_all_tasks())
 
 
 if __name__ == "__main__":
