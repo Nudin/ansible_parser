@@ -57,7 +57,8 @@ class Play:
 
     def get_roles(self):
         return [
-            RoleInvocation(role, self.folder) for role in self.data.get("roles", [])
+            RoleInvocation(role, self.folder)
+            for role in self.data.get("roles", []) or []
         ]
 
     def find_all_tasks(self):
@@ -94,10 +95,20 @@ class TaskList:
         imported_tasks = []
         for task in tasks:
             if "include_tasks" in task.data:
-                tf = TaskFile(self.folder, task.data["include_tasks"])
+                arg = task.data["include_tasks"]
+                if isinstance(arg, str):
+                    filename = arg
+                else:
+                    filename = arg["file"]
+                tf = TaskFile(self.folder, filename)
                 imported_tasks.extend(tf.get_tasks())
             if "import_tasks" in task.data:
-                tf = TaskFile(self.folder, task.data["import_tasks"])
+                arg = task.data["import_tasks"]
+                if isinstance(arg, str):
+                    filename = arg
+                else:
+                    filename = arg["file"]
+                tf = TaskFile(self.folder, filename)
                 imported_tasks.extend(tf.get_tasks())
             if task.is_block():
                 block_task = [Task(t) for t in task.data.get("block", [])]
@@ -138,6 +149,11 @@ class Task:
         "diff",
         "with_fileglob",
         "vars",
+        "retries",
+        "until",
+        "delay",
+        "no_log",
+        "with_subelements",
     ]
 
     def __init__(self, data):
@@ -174,6 +190,8 @@ class Task:
 class RoleInvocation:
     def __init__(self, data, folder):
         self.folder = folder
+        if isinstance(data, str):
+            data = {"role": data}
         self.data = data
         self.name = data["role"]
         self.role = Role(folder, self.name)
