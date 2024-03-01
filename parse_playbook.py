@@ -276,16 +276,13 @@ class Role:
         return set().union(*tag_lists)
 
 
+# Demo usage
 def main():
     playbook = Path(sys.argv[1])
     pb = Playbook(playbook)
-    print(pb.find_all_tags())
-    # print(pb.find_all_tasks())
+    print(f"Found {len(pb.find_all_tags())} tags")
+    print(f"Found {len(pb.find_all_tasks())} tasks")
 
 
 if __name__ == "__main__":
     main()
-
-
-# TODO:
-# Generate snips
